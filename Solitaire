@@ -1,0 +1,594 @@
+from scene import *
+from random import *
+
+
+# a class to define the basic card behavior
+class Card(Node):
+	# array of card icons. order is spades, clubs, hearts, diamonds
+	card_icons = '🂡🂢🂣🂤🂥🂦🂧🂨🂩🂪🂫🂭🂮🃑🃒🃓🃔🃕🃖🃗🃘🃙🃚🃛🃝🃞🂱🂲🂳🂴🂵🂶🂷🂸🂹🂺🂻🂽🂾🃁🃂🃃🃄🃅🃆🃇🃈🃉🃊🃋🃍🃎'
+	card_back = '🂠'
+	
+	def __init__(self, card_number):
+		# number is the 0 - 51 value for the card in the deck
+		self.number = card_number
+		# value is the 0 - 12 value in the suit
+		# suit is the 0 - 3 value for the suit
+		# 0 = spades 1 = clubs 2 = hearts 3 = daimonds
+		self.suit, self.value = divmod(self.number, 13)
+		# set the icon based on the card number
+		self.face = self.card_icons[self.number]
+		# set the color based on card number.
+		self.color = 'black' if self.number < 26 else 'red' 
+		
+		# bool to determine if face up
+		self.face_up = False
+		# bool to determine if active
+		self.active = False
+			
+		# set up the card image with nodes
+		# the path defines the rectangular shape and size and line width
+		rect_path = ui.Path.rect(0, 0, 75, 100)
+		rect_path.line_width = 1
+		# the bg_node is a shape node that uses the path to draw the shape
+		bg_node = ShapeNode(rect_path, 'white', 'black')
+		# the text node draws the unicode playing card on the bg_node
+		self.text_node = LabelNode(self.card_back, ('Courier New', 100))
+		if self.face_up:
+			self.text_node.text = self.face
+			self.text_node.color = self.color
+		else:
+			self.text_node.text = self.card_back
+			self.text_node.color = 'blue'
+		self.text_node.position = (0, 0)
+		# add the nodes as children of the card node
+		self.add_child(bg_node)
+		bg_node.add_child(self.text_node)
+		
+	def point_inside(self, x, y):
+		return self.bbox.contains_point((x, y))
+	
+	def update(self):
+		# Check if the card has been set to face up or not
+		# Then set the text node and color accordingly
+		if self.face_up:
+			self.text_node.text = self.face
+			self.text_node.color = self.color
+		else:
+			self.text_node.text = self.card_back
+			self.text_node.color = 'blue'
+
+class Deck():
+	# this object will hold all the cards needed for the game
+	# all cards will be added to the deck during setup
+	# then the deck will be shuffled, and one card will be taken
+	# from the deck at a time
+	def __init__(self):
+		self.cards = [Card(i) for i in range(52)]
+	
+	def shuffle(self):
+		shuffle(self.cards)
+		
+	def print(self):
+		for i in self.cards:
+			print(i.face)
+	
+	def get_card(self):
+		return self.cards.pop(0)
+		
+class Pile(Node):
+	# this class represents the pile of face down cards in the top
+	# right corner. When clicked, it transfers a card to the waste
+	def __init__(self):
+		self.cards = []
+		
+		rect_path = ui.Path.rect(0, 0, 75, 100)
+		rect_path.line_width = 1
+		self.bg_node = ShapeNode(rect_path, 'white', 'black')
+		self.label_node = LabelNode('🂠', ('Courier New', 100))
+		self.label_node.color = 'blue'
+		self.label_node.position = (0, 0)
+		
+		# If the pile has cards in it, draw a single face down card
+		# if no cards, just draw a green rectangle
+		if len(self.cards) == 0:
+			self.bg_node.fill_color = 'green'
+			self.label_node.text = ' '
+		else:
+			self.bg_node.fill_color = white
+			self.label_node.text = '🂠'
+		
+		self.add_child(self.bg_node)
+		self.bg_node.add_child(self.label_node)
+		
+	def add_card(self, c):
+		self.cards.insert(0, c)
+		
+	def get_card(self):
+		return self.cards.pop(0)
+		
+	def update(self):
+		# redraw the pile
+		if len(self.cards) == 0:
+			self.bg_node.fill_color = 'green'
+			self.label_node.text = ' '
+		else:
+			self.bg_node.fill_color = 'white'
+			self.label_node.text = '🂠'
+
+	def point_inside(self, x, y):
+		return self.bbox.contains_point((x, y))
+		
+class Waste(Node):
+	# this class represents the stack of cards next to the pile
+	# when clicked, it transfers a card to the moving stack
+	def __init__(self):
+		self.cards = []
+		
+		rect_path = ui.Path.rect(0, 0, 75, 100)
+		rect_path.line_width = 1
+		self.bg_node = ShapeNode(rect_path, 'green', 'black')
+		self.text_node = LabelNode(' ', ('Courier New', 100))
+		self.text_node.color = 'blue'
+		
+		self.add_child(self.bg_node)
+		self.bg_node.add_child(self.text_node)
+		
+	def add_card(self, c):
+		self.cards.insert(0, c)
+		
+	def get_card(self):
+		return self.cards.pop(0)
+		
+	def update(self):
+		# if no cards in the waste, draw a green rectangle
+		# if cards are present, draw the top card face up
+		if len(self.cards) == 0:
+			self.bg_node.fill_color = 'green'
+			self.text_node.text = ' '
+		else:
+			self.bg_node.fill_color = 'white'
+			self.text_node.text = self.cards[0].face
+			self.text_node.color = self.cards[0].color
+			
+	def point_inside(self, x, y):
+		return self.bbox.contains_point((x, y))
+			
+class F_stack(Node):
+	# this class represents the stacks of cards in the top left where
+	# all the cards go to win the game. There will be 4 of them.
+	def __init__(self):
+		self.cards = []
+		self.suit = -1 # start with no suit
+		
+		rect_path = ui.Path.rect(0, 0, 75, 100)
+		rect_path.line_width = 1
+		self.bg_node = ShapeNode(rect_path, 'green', 'black')
+		self.text_node = LabelNode(' ', ('Courier New', 100))
+		
+		self.add_child(self.bg_node)
+		self.bg_node.add_child(self.text_node)
+		
+	def add_card(self, c):
+		# if the suit has not been set yet, set it to what the card is
+		# only accept cards with matching suit
+		if self.suit == -1:
+			self.cards.insert(0, c)
+			self.suit = c.suit
+		elif self.suit == c.suit:
+			self.cards.insert(0, c)
+		
+	def get_card(self):
+		return self.cards.pop(0)
+		
+	def point_inside(self, x, y):
+		return self.bbox.contains_point((x, y))
+		
+	def update(self):
+		# if the f stack has cards, draw the top card
+		# if not, draw a green rectangle
+		if len(self.cards) == 0:
+			self.bg_node.fill_color = 'green'
+			self.text_node.text = ' '
+		else:
+			self.bg_node.fill_color = 'white'
+			self.text_node.text = self.cards[0].face
+			self.text_node.color = self.cards[0].color
+
+
+class T_stack(Node):
+	# this class represents the stacks of cards in the middle
+	# of the game. Will hold both face up and face down cards.
+	# When clicked, will need to determine which card in the 
+	# stack was clicked and transfer the appropriate cards to
+	# the moving stack
+	def __init__(self):
+		self.cards = []
+		
+		rect_path = ui.Path.rect(0, 0, 75, 100)
+		rect_path.line_width = 1
+		self.bg_node = ShapeNode(rect_path, 'green', 'black')
+		self.add_child(self.bg_node)
+		
+	def add_card(self, c):
+		# must also add each card as a child node so that it gets drawn.
+		self.cards.append(c)
+		self.add_child(c)
+		
+	def get_card(self):
+		# must also remove card from children so that it stops being drawn.
+		c = self.cards.pop()
+		c.remove_from_parent()
+		return c
+		
+	def point_inside(self, x, y):
+		return self.bbox.contains_point((x, y))
+		
+	def get_touched_card(self, y):
+		# cards are placed every 25 pixels down from the top of the
+		# stack. This function takes the y coord of the touch location
+		# and determines how many 25 pixel units fits between it and the
+		# top of the bounding box. If the bottom card is touched, we might
+		# calculate an out of bounds index, so we return the last valid 
+		# index instead
+		bbox_top = self.bbox[1] + self.bbox[3]
+		i = round((bbox_top - y) // 25)
+		return min(i, len(self.cards) - 1)
+		
+	def update(self):
+		# set the position of each card in the stack
+		# cards are placed every 25 pixels down
+		for i in range(len(self.cards)):
+			self.cards[i].position = (0, -i * 25)
+			self.cards[i].z_position = i
+			self.cards[i].update()
+			
+class Stack(Node):
+	# this class represents the cards being moved around the board
+	# by the player.
+	def __init__(self):
+		self.cards = []
+	
+	def add_card(self, c):
+		# all cards in the stack will be face up.
+		# must add them to children so they are drawn
+		c.face_up = True
+		self.cards.insert(0, c)
+		self.add_child(c)
+		
+	def get_card(self):
+		# must remove from children so they are not drawn
+		c = self.cards.pop(0)
+		c.remove_from_parent()
+		return c
+	
+	def update(self):
+		# place cards every 25 pixels down from top
+		for i in range(len(self.cards)):
+			self.cards[i].position = (0, -i * 25)
+			self.cards[i].z_position = i
+			self.cards[i].update()
+
+class Bounce_card(Node):
+	# this class represents the bouncing cards created at the end of a 
+	# game. 
+	def __init__(self, i, p, s):
+		# i = the card to copy
+		# p = the position to create the bounce card at
+		# s = the size of the screen
+		self.face = i.face
+		self.color = i.color
+		
+		rect_path = ui.Path.rect(0, 0, 75, 100)
+		self.bg_node = ShapeNode(rect_path, 'white', 'black')
+		self.text_node = LabelNode(self.face, ('Courier New', 100))
+		self.text_node.color = self.color
+		self.add_child(self.bg_node)
+		self.bg_node.add_child(self.text_node)
+		self.position = p
+		# randomly select speeds in the x and y directions
+		self.x_speed = uniform(-5, 5)
+		self.y_speed = uniform(-5, 5)
+		self.size = s
+		
+	def update(self):
+		# check if the bounding box is outside the scene
+		# is so, reverse the speed so it comes back inside
+		if self.bbox[0] < 0:
+			self.x_speed *= -1
+		if self.bbox[1] < 0:
+			self.y_speed *= -1
+		if self.bbox[0] + self.bbox[2] > self.size.w:
+			self.x_speed *= -1
+		if self.bbox[1] + self.bbox[3] > self.size.h:
+			self.y_speed *= -1
+		# create a move action with our speeds
+		move_action = Action.move_by(self.x_speed, self.y_speed, 0, TIMING_LINEAR)
+		self.run_action(move_action)
+		
+		
+class Reset(Node):
+	# this class represents a reset button
+	# when clicked, it will begin a new game
+	def __init__(self):
+		rect_path = ui.Path.rect(0, 0, 100, 75)
+		self.bg_node = ShapeNode(rect_path, 'white', 'black')
+		self.text_node = LabelNode('RESET', ('Helvetica', 28))
+		self.text_node.color = 'black'
+		self.bg_node.add_child(self.text_node)
+		self.add_child(self.bg_node)
+	
+	def point_inside(self, x, y):
+		return self.bbox.contains_point((x, y))
+	
+class TestScene(Scene):
+	def setup(self):
+		self.background_color = 'green'
+		self.time_at_last_touch = self.t
+		self.time_for_double_touch = .2
+		
+		# set up the deck object that initially holds all the cards
+		# will be used to distribute cards to the other objects
+		self.deck = Deck()
+		self.deck.shuffle()
+		
+		# the pile is the stack of face down cards in the top right
+		# when clicked, the top card will be transferred to waste
+		# when empty, click will transfer all waste cards back to pile
+		self.pile = Pile()
+		self.pile.position = (self.size.w - 100, self.size.h - 100)
+		self.add_child(self.pile)
+		
+		# holds face up cards that came from the pile
+		# when clicked, will transfer top card to the stack
+		self.waste = Waste()
+		self.waste.position = (self.size.w - 200, self.size.h - 100)
+		self.add_child(self.waste)
+		
+		# f stacks are the 4 sets of cards in the top left
+		# when all cards are added to the f stacks the game is won
+		# clicking an f stack should transfer the top card to the stack
+		self.f_stacks = []
+		for i in range(4):
+			f = F_stack()
+			f.position = (100 * (i + 1), self.size.h - 100)
+			self.f_stacks.append(f)
+			self.add_child(f)
+		
+		
+		
+		# t stacks are the 7 sets of cards in the middle
+		# when clicking on the t stack, it should transfer all cards
+		# below the click point to the stack
+		self.t_stacks = []
+		for i in range(7):
+			t = T_stack()
+			t.position = (100 * (i + 1), self.size.h - 250)
+			# add a set number of face down cards to each t stack
+			for j in range(i):
+				t.add_card(self.deck.get_card())
+			# add 1 face up card to each t stack
+			c = self.deck.get_card()
+			c.face_up = True
+			t.add_card(c)
+			self.t_stacks.append(t)
+			self.add_child(t)
+		
+		
+		# put remaining deck cards into the pile
+		for i in range(len(self.deck.cards)):
+			self.pile.add_card(self.deck.get_card())
+		
+		# the stack is used to move cards between waste, t stacks, and f stacks
+		# the stack should follow the touch when not empty
+		# when a touch ends the cards should all be emptied from the stack
+		# either to a new location or back to previous location
+		self.stack = Stack()
+		self.add_child(self.stack)
+		
+		self.bouncers = []
+		self.win = False
+		
+		self.reset = Reset()
+		self.reset.position = (self.size.w - 150, 100)
+		self.add_child(self.reset)
+	
+
+	
+	def touch_began(self, touch):
+		x, y = touch.location
+		# check if a double tap
+		double_tap = False
+		if (self.t - self.time_at_last_touch) < self.time_for_double_touch:
+			double_tap = True
+		
+		# check if pile was clicked
+		# if pile is not empty, transfer card to waste
+		# if pile is empty, get all cards from waste
+		if self.pile.point_inside(x, y):
+			if len(self.pile.cards) > 0:
+				self.waste.add_card(self.pile.get_card())
+			else:
+				for i in range(0, len(self.waste.cards)):
+					self.pile.add_card(self.waste.get_card())
+		# check if waste was clicked
+		# if waste is not empty, transfer top card to stack
+		# if waste is empty, do nothing?
+		if self.waste.point_inside(x, y):
+			if len(self.waste.cards) > 0:
+				# check if its a double tap
+				if double_tap:
+					# check the f_stacks to see if any are a match
+					for f in self.f_stacks:
+						if len(f.cards) == 0:
+							if self.waste.cards[0].value == 0:
+								f.add_card(self.waste.get_card())
+								break
+						elif len(f.cards) > 0:
+							f_stack_card = f.cards[0]
+							if self.waste.cards[0].suit == f_stack_card.suit:
+								if self.waste.cards[0].value == f_stack_card.value + 1:
+									f.add_card(self.waste.get_card())
+									break
+				else:
+					self.stack.card_return = self.waste
+					self.stack.add_card(self.waste.get_card())
+					move_action = Action.move_to(x, y, 0, TIMING_LINEAR)
+					self.stack.run_action(move_action)
+		# check if T stacks were clicked
+		# if the bottom card is face down, make it face up
+		# otherwise, determine which card was touched and add the
+		# cards below it to the moving stack 
+		for t in self.t_stacks:
+			if t.point_inside(x, y):
+				# make sure t stack is not empty
+				if len(t.cards) > 0:
+					# get the last card in the t stack
+					last_card = t.cards[-1]
+					# check if its a double tap
+					if double_tap:
+						# check the f_stacks to see if any are a match
+						for f in self.f_stacks:
+							if len(f.cards) == 0:
+								if last_card.value == 0:
+									f.add_card(t.get_card())
+									break
+							elif len(f.cards) > 0:
+								f_stack_card = f.cards[0]
+								if last_card.suit == f_stack_card.suit:
+									if last_card.value == f_stack_card.value + 1:
+										f.add_card(t.get_card())
+										break
+					else:
+						# check if the last card is face up
+						if last_card.face_up:
+							# set this t stack as the card return so that
+							# the cards from the moving stack get put back
+							# in case the move is cancelled
+							self.stack.card_return = t
+							# get the index of the touched card
+							c = t.get_touched_card(y)
+							# if the touched card is face up, add it and all
+							# cards below it to the moving stack
+							if t.cards[c].face_up:
+								for i in range(c, len(t.cards)):
+									self.stack.add_card(t.cards.pop())
+								# move the stack to the touched location.
+								move_action = Action.move_to(x, y, 0,TIMING_LINEAR)
+								self.stack.run_action(move_action)
+						# last card face down, make it face up.
+						else:
+							c = t.get_touched_card(y)
+							if c == len(t.cards) - 1:
+								last_card.face_up = True
+					
+		
+		# check if reset button is pressed.
+		# reset game by removing all children from the scene
+		# and running the setup function again.
+		if self.reset.point_inside(x, y):
+			for i in self.children:
+				i.remove_from_parent()
+				del i
+			self.setup()
+		
+				
+	def touch_moved(self, touch):
+		x, y = touch.location
+		# move the stack to the touch's current location
+		if len(self.stack.cards) > 0:
+			move_action = Action.move_to(x, y, 0, TIMING_LINEAR)
+			self.stack.run_action(move_action)
+			
+	def touch_ended(self, touch):
+		x, y = touch.location
+		# check f stacks and t stacks.
+		# if any are clicked, transfer cards from stack to target
+		for f in self.f_stacks:
+			if f.point_inside(x, y):
+				if len(self.stack.cards) == 1:
+				# check if empty and if stack is an ace
+					if len(f.cards) == 0:
+						if self.stack.cards[0].value == 0:
+							self.stack.card_return = f
+					# if not empty check that suit matches and that value is ok
+					else:
+						if f.suit == self.stack.cards[0].suit:
+							if f.cards[0].value == (self.stack.cards[0].value - 1):
+								self.stack.card_return = f
+				
+		# if the stack has cards and we end the touch on a t stack,
+		# then check if the t stack has cards. If so, make sure that the
+		# card we're adding to the t stack has an appropriate value and
+		# color
+		for t in self.t_stacks:
+			if len(self.stack.cards) > 0:
+				if t.point_inside(x, y):
+					# check if the t stack is empty
+					if len(t.cards) > 0:
+						# check that first card in stack has the right value
+						stack_first = self.stack.cards[0]
+						t_stack_last = t.cards[len(t.cards) - 1]
+						if t_stack_last.value == (stack_first.value + 1):
+							# check suits
+							if (t_stack_last.suit == 0 or t_stack_last.suit == 1):
+								if (stack_first.suit == 2 or stack_first.suit == 3):
+									self.stack.card_return = t
+							elif (t_stack_last.suit == 2 or t_stack_last.suit == 3):
+								if (stack_first.suit == 0 or stack_first.suit == 1):
+									self.stack.card_return = t
+					# is empty, only allow kings
+					else:
+						if self.stack.cards[0].value == 12:
+							self.stack.card_return = t
+							
+			
+		
+		# transfer cards from stack to card_return target
+		for i in range(len(self.stack.cards)):
+			self.stack.card_return.add_card(self.stack.get_card())
+			
+		# update the time at last touch
+		self.time_at_last_touch = self.t
+			
+	def did_change_size(self):
+		self.pile.position = (self.size.w - 100, self.size.h - 100)
+		self.waste.position = (self.size.w - 200, self.size.h - 100)
+		for i in range(len(self.f_stacks)):
+			f = self.f_stacks[i]
+			f.position = (100 * (i + 1), self.size.h - 100)
+		for i in range(len(self.t_stacks)):
+			t = self.t_stacks[i]
+			t.position = (100 * (i + 1), self.size.h - 250)
+		self.reset.position = (self.size.w - 150, 100)
+		
+	def update(self):
+		self.pile.update()
+		self.waste.update()
+		for f in self.f_stacks:
+			f.update()
+		for t in self.t_stacks:
+			t.update()
+		self.stack.update()
+		
+		# check if won
+		if self.win == False:
+			# the game is won once the f stacks each have 13 cards
+			if len(self.f_stacks[0].cards) == 13 and len(self.f_stacks[1].cards) == 13 and len(self.f_stacks[2].cards) == 13 and len(self.f_stacks[3].cards) == 13:
+				# create bouncers at each f stack location
+				for i in range(0, 13):
+					for f in self.f_stacks:
+						self.bouncers.append(Bounce_card(f.cards[i], f.position, self.size))
+						f.remove_from_parent()
+					
+				for i in self.bouncers:
+					self.add_child(i)
+					
+				self.win = True
+				
+			
+		for i in self.bouncers:
+			i.update()
+				
+				
+				
+run(TestScene())
